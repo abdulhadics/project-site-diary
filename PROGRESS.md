@@ -2,29 +2,27 @@
 
 ## Current milestone
 
-M0 — Accounts and tools. In progress.
+M1 — Project setup and deploy. Local checks passed. Vercel deployment and the iPhone test are pending.
 
 ## Done
 
-- Delivered the plan and started M0 at the user's request.
-- Verified Node.js 22 LTS, npm and Git. Initialized the local repository.
-- Added Git exclusions for local environment files.
-- Verified the public GitHub repository and linked it as the local origin.
-- Prepared the environment variable template and ignored local file.
-- Added the Supabase URL and publishable key to .env.local. Supabase Auth settings returned HTTP 200 using the saved values. The user confirmed the Sydney region.
-- Saved Gemini credentials in the ignored local environment and verified the model lookup.
+- M0 — Verified Node.js 22 LTS, npm and Git. The GitHub repository is public and main is linked to Vercel.
+- Supabase Auth responded using the local project configuration. The user confirmed Sydney (ap-southeast-2).
+- Gemini accepted the ignored local environment key for the configured model lookup.
+- Configured and verified all four environment variables in Vercel Production and Preview. The Gemini key is stored as a Vercel secret.
+- Built the Next.js App Router starter locally with TypeScript and Tailwind CSS. Vercel is configured for Next.js and Node.js 22.x.
+- npm run typecheck and npm run build passed. The local production page returned 200 and rendered without layout overflow at Chrome widths 320, 390, 412 and 1440 px.
 
 ## Next
 
-- Manual step 4 — Authorize the Vercel CLI and grant the Vercel GitHub app access to the repository. Awaiting continue.
-- Finish M0 account and environment setup. Check the milestone before moving on.
+- Verify the deployed HTTPS starter and ask the user to open it in iPhone Safari.
+- After the iPhone test and the user's continue, start M2 for database setup and login.
 
 ## Open issues and decisions
 
-- User will own the service accounts. Vercel project connection and environment variables remain pending.
-- The source repository is public. The deployed diary requires login and stores client photos and PDFs in a private bucket.
-- Use Next.js App Router and test the full 30-photo flow on the user's iPhone. Plan for iPhone 14 or newer. The exact device and iOS version are pending.
-- If Gemini is unavailable, the user can write or edit the English description manually.
-- The generated report preview will offer viewing and description editing. Regenerate the PDF from the revised descriptions.
+- User owns the service accounts. Rotate the Gemini key shared in chat before going live with client photos.
+- The deployed diary will require login and store client photos and PDFs in a private bucket.
+- Test the complete report workflow with 30 photos on the user's iPhone 14 or newer. Exact device and iOS version are pending.
+- Offer manual English descriptions when Gemini is unavailable, and allow editing descriptions from the report preview before regenerating.
 - Compress large live camera photos on the phone and verify that the work remains clearly visible.
 - Stop at 30% weekly Codex usage remaining.
