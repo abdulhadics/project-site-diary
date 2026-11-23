@@ -70,7 +70,7 @@ export function reportsForDay(diary: Diary, day: string): LocalReport[] {
 }
 
 export function photoWaiting(photo: LocalPhoto): boolean {
-  return photo.pending && (photo.deleted || photo.review === "clear" || photo.review === "unavailable");
+  return photo.pending && (photo.deleted || photo.review !== "checking");
 }
 
 export function waiting(diary: Diary): number {

@@ -46,7 +46,7 @@ Send me: confirmation that signup is off and the operator can sign in.
 Do:
 
 1. Open the Preview on iPhone Safari. Sign in, save the project settings and reopen the browser to check the session.
-2. Test a denied location permission, then allow location and take five test photos. Include blurry and dark images, use Retake, and try an Urdu or Roman Urdu note. Confirm the capture times and GPS accuracy in the diary.
+2. Test a denied location permission, then allow location and take five test photos. Include blurry and dark images. Try Keep photo and continue, Retake, and an Urdu or Roman Urdu note. Confirm the capture times and GPS accuracy in the diary.
 3. Approve the English descriptions. Turn on airplane mode, reopen the diary, edit a description and generate a PDF from the saved photos. Reconnect and check that sync finishes.
 4. Read the preview, edit a description and regenerate. Open the older saved PDF from the day to check that the original is still available.
 5. On a 30-photo test day, verify the portrait report, two photos per page, map link and file size. Tap Share after generation, try **Save to Files** and WhatsApp, then test **Download**.

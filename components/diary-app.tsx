@@ -86,8 +86,8 @@ function Workspace({ client, owner, session, signIn, signOut }: {
   const activeNumber = photos.findIndex((photo) => photo.row.id === currentId) + 1;
   const queue = diary ? waiting(diary) : 0;
   const canUseAi = Boolean(session) && issue !== "offline";
-  const unresolved = photos.some((photo) => photo.review === "checking" || photo.review === "rejected");
-  const ready = photos.length > 0 && !unresolved && photos.every((photo) => photo.row.description_approved_at);
+  const checking = photos.some((photo) => photo.review === "checking");
+  const ready = photos.length > 0 && !checking && photos.every((photo) => photo.row.description_approved_at);
   const date = reportDate(day);
 
   function navigate(next: Tab) {
@@ -112,7 +112,7 @@ function Workspace({ client, owner, session, signIn, signOut }: {
     const first = id ? photos.find((photo) => photo.row.id === id) : photos[0];
     if (!first) return;
     setCurrentId(first.row.id);
-    setStage(first.review === "rejected" || first.review === "checking" ? "captured" : "notes");
+    setStage(first.review === "checking" ? "captured" : "notes");
   }
 
   async function saveSettings(fields: ProjectFields) {
@@ -145,11 +145,12 @@ function Workspace({ client, owner, session, signIn, signOut }: {
         ai_ok: null, storage_path: path, size_bytes: blob.size,
       };
       const replaced = retakeId ? stored.photos[retakeId] : undefined;
-      if (replaced?.review === "rejected") delete stored.photos[retakeId];
+      if (replaced && !replaced.deleted) {
+        stored.photos[retakeId] = { ...replaced, ...tracked(replaced.row), deleted: true };
+      }
       stored.photos[id] = { ...tracked(row), review: token ? "checking" : "unavailable", deleted: false };
       return {
         put: [[path, blob]],
-        remove: replaced?.review === "rejected" ? [replaced.row.storage_path] : [],
       };
     });
     setCurrentId(id);
@@ -205,12 +206,11 @@ function Workspace({ client, owner, session, signIn, signOut }: {
     void save((stored) => {
       const current = stored.photos[photo.row.id];
       if (!current) return;
-      if (current.review === "rejected" || current.review === "checking") {
+      if (current.review === "checking") {
         delete stored.photos[photo.row.id];
         return { remove: [photo.row.storage_path] };
       }
       stored.photos[photo.row.id] = { ...current, ...tracked(current.row), deleted: true };
-      return { remove: [photo.row.storage_path] };
     }).then(() => setStage("list")).catch(() => {});
   }
 
@@ -317,12 +317,14 @@ function Workspace({ client, owner, session, signIn, signOut }: {
                   <p className="muted">{captureTime(active.row.captured_at)} · Location ±{Math.round(active.row.accuracy)} m</p>
                   {active.row.accuracy > poorAccuracyMetres && <p className="notice warning">Location accuracy is low. The recorded location is shown in the report.</p>}
                   {active.review === "checking" && <p role="status" className="muted">Checking the photo…</p>}
-                  {active.review === "rejected" && <p role="alert" className="notice warning"><strong>Photo unclear, click again</strong>{active.reason ? " · " + active.reason : ""}</p>}
+                  {active.review === "rejected" && <p role="alert" className="notice warning"><strong>Gemini suggests a retake.</strong>{active.reason ? " · " + active.reason : ""}</p>}
                   {active.review === "unavailable" && <p className="muted">Photo check unavailable. Review the image yourself.</p>}
                   <div className="actions">
-                    {active.review === "rejected" ? <button type="button" className="button primary" onClick={() => openCamera(active.row.id)}>Retake photo</button>
-                      : <button type="button" className="button primary" disabled={unresolved} onClick={() => openCamera()}>+ Add photo</button>}
-                    <button type="button" className="button" disabled={unresolved} onClick={() => editPhoto()}>Done</button>
+                    <button type="button" className={active.review === "rejected" ? "button" : "button primary"} disabled={checking} onClick={() => openCamera()}>+ Add photo</button>
+                    <button type="button" className={active.review === "rejected" ? "button primary" : "button"} disabled={checking} onClick={() => editPhoto()}>
+                      {active.review === "rejected" ? "Keep photo and continue" : "Done"}
+                    </button>
+                    {active.review === "rejected" && <button type="button" className="button" onClick={() => openCamera(active.row.id)}>Retake photo</button>}
                     <button type="button" className="text-button danger" onClick={() => removePhoto(active)}>Delete photo</button>
                   </div>
                 </section>
@@ -344,7 +346,7 @@ function Workspace({ client, owner, session, signIn, signOut }: {
                             <div className="photo-summary">
                               <strong>Photo {index + 1}</strong>
                               <span className="muted">{captureTime(photo.row.captured_at)}</span>
-                              <span className="photo-status">{photo.review === "rejected" ? "Retake needed" : photo.review === "checking" ? "Checking photo" : photo.row.description_approved_at ? "Approved" : "Needs description"}</span>
+                              <span className="photo-status">{photo.review === "checking" ? "Checking photo" : photo.row.description_approved_at ? "Approved" : photo.review === "rejected" ? "Gemini suggested a retake" : "Needs description"}</span>
                             </div>
                             <button type="button" className="button" disabled={Boolean(progress)} onClick={() => editPhoto(photo.row.id)}
                               aria-label={"Edit photo " + (index + 1)}>Edit</button>

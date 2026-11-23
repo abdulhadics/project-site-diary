@@ -115,7 +115,8 @@ async function pull(client: DiaryClient, owner: string, local: Diary) {
     for (const photo of photos) {
       if (!current.photos[photo.id]?.pending) {
         current.photos[photo.id] = {
-          ...tracked(photo, false), review: photo.ai_ok === true ? "clear" : "unavailable", deleted: false, uploaded: true,
+          ...tracked(photo, false), review: photo.ai_ok === true ? "clear" : photo.ai_ok === false ? "rejected" : "unavailable",
+          deleted: false, uploaded: true, reason: current.photos[photo.id]?.reason,
         };
       }
     }
