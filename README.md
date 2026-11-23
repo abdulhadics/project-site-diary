@@ -2,6 +2,8 @@
 
 A private mobile diary for construction progress. Capture geotagged site photos, approve English descriptions and export an A4 PDF for the selected day.
 
+After saving a PDF, tap **Start new report** beside Site photos or in the report preview. Enter a project name to open an empty draft. History shows previous drafts and PDFs by project and date.
+
 ## Run locally
 
 Use Node.js 22 LTS. On Windows PowerShell:

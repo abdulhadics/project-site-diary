@@ -11,7 +11,8 @@ export type LocalPhoto = Tracked<Photo> & { review: PhotoReview; deleted: boolea
 export type LocalReport = Tracked<Report> & { filename?: string; uploaded?: boolean };
 
 export type Diary = {
-  project: Tracked<Project> | null;
+  activeProjectId: string | null;
+  projects: Record<string, Tracked<Project>>;
   entries: Record<string, Tracked<Entry>>;
   photos: Record<string, LocalPhoto>;
   reports: Record<string, LocalReport>;
@@ -24,7 +25,15 @@ export const poorAccuracyMetres = 50;
 export const pdfLimit = 15 * 1024 * 1024;
 
 export function newDiary(): Diary {
-  return { project: null, entries: {}, photos: {}, reports: {} };
+  return { activeProjectId: null, projects: {}, entries: {}, photos: {}, reports: {} };
+}
+
+export function entryKey(projectId: string, day: string): string {
+  return projectId + "/" + day;
+}
+
+export function activeProject(diary: Diary): Project | null {
+  return diary.activeProjectId ? diary.projects[diary.activeProjectId]?.row ?? null : null;
 }
 
 export function tracked<Row>(row: Row, pending = true): Tracked<Row> {
@@ -57,15 +66,15 @@ export function reportFilename(name: string, day: string): string {
   return (safeName || "Project") + "_" + day + ".pdf";
 }
 
-export function photosForDay(diary: Diary, day: string): LocalPhoto[] {
+export function photosForDay(diary: Diary, projectId: string, day: string): LocalPhoto[] {
   return Object.values(diary.photos)
-    .filter((photo) => !photo.deleted && photo.row.entry_id === diary.entries[day]?.row.id)
+    .filter((photo) => !photo.deleted && photo.row.entry_id === diary.entries[entryKey(projectId, day)]?.row.id)
     .sort((a, b) => a.row.captured_at.localeCompare(b.row.captured_at) || a.row.id.localeCompare(b.row.id));
 }
 
-export function reportsForDay(diary: Diary, day: string): LocalReport[] {
+export function reportsForDay(diary: Diary, projectId: string, day: string): LocalReport[] {
   return Object.values(diary.reports)
-    .filter((report) => report.row.report_date === day)
+    .filter((report) => report.row.project_id === projectId && report.row.report_date === day)
     .sort((a, b) => b.row.created_at.localeCompare(a.row.created_at) || b.row.id.localeCompare(a.row.id));
 }
 
@@ -74,7 +83,7 @@ export function photoWaiting(photo: LocalPhoto): boolean {
 }
 
 export function waiting(diary: Diary): number {
-  return Number(diary.project?.pending ?? false)
+  return Object.values(diary.projects).filter((project) => project.pending).length
     + Object.values(diary.entries).filter((entry) => entry.pending).length
     + Object.values(diary.photos).filter(photoWaiting).length
     + Object.values(diary.reports).filter((report) => report.pending).length;

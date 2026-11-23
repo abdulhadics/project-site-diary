@@ -1,7 +1,7 @@
 import type { DiaryClient } from "../supabase";
 import { changeDiary, readAsset, readDiary, storeAsset } from "./local";
 import {
-  bucket, photoWaiting, tracked,
+  bucket, entryKey, photoWaiting, tracked,
   type Diary, type Entry, type LocalPhoto, type Photo, type Project, type Report, type Tracked,
 } from "./model";
 
@@ -93,24 +93,25 @@ async function allRows<Row>(
   }
 }
 
-async function pull(client: DiaryClient, owner: string, local: Diary) {
-  const result = await client.from("projects").select("*").order("created_at").limit(1);
-  checked(result, "database");
-  const project = local.project?.row ?? result.data?.[0];
-  if (!project) return local;
-
-  const filter = project.id;
-  const [entries, photos, reports] = await Promise.all([
-    allRows<Entry>((from, to) => client.from("entries").select("*").eq("project_id", filter).order("id").range(from, to)),
-    allRows<Photo>((from, to) => client.from("photos").select("*").eq("project_id", filter).order("id").range(from, to)),
-    allRows<Report>((from, to) => client.from("reports").select("*").eq("project_id", filter).order("id").range(from, to)),
+async function pull(client: DiaryClient, owner: string) {
+  const [projects, entries, photos, reports] = await Promise.all([
+    allRows<Project>((from, to) => client.from("projects").select("*").order("id").range(from, to)),
+    allRows<Entry>((from, to) => client.from("entries").select("*").order("id").range(from, to)),
+    allRows<Photo>((from, to) => client.from("photos").select("*").order("id").range(from, to)),
+    allRows<Report>((from, to) => client.from("reports").select("*").order("id").range(from, to)),
   ]);
 
   return changeDiary(owner, (current) => {
-    if (current.project && current.project.row.id !== filter) return;
-    if (!current.project?.pending && result.data?.[0]?.id === filter) current.project = tracked(result.data[0], false);
+    for (const project of projects) {
+      if (!current.projects[project.id]?.pending) current.projects[project.id] = tracked(project, false);
+    }
+    if (!current.activeProjectId || !current.projects[current.activeProjectId]) {
+      const latest = Object.values(current.projects).sort((a, b) => b.row.created_at.localeCompare(a.row.created_at))[0];
+      current.activeProjectId = latest?.row.id ?? null;
+    }
     for (const entry of entries) {
-      if (!current.entries[entry.report_date]?.pending) current.entries[entry.report_date] = tracked(entry, false);
+      const key = entryKey(entry.project_id, entry.report_date);
+      if (!current.entries[key]?.pending) current.entries[key] = tracked(entry, false);
     }
     for (const photo of photos) {
       if (!current.photos[photo.id]?.pending) {
@@ -131,6 +132,7 @@ async function pull(client: DiaryClient, owner: string, local: Diary) {
 async function pushEntry(client: DiaryClient, owner: string, entry: Tracked<Entry>) {
   const result = await client.from("entries").upsert(entry.row);
   const date = entry.row.report_date;
+  const key = entryKey(entry.row.project_id, date);
   if (result.error?.code === "23505") {
     const duplicate = await client.from("entries").select("*")
       .eq("project_id", entry.row.project_id).eq("report_date", date).single();
@@ -138,8 +140,8 @@ async function pushEntry(client: DiaryClient, owner: string, entry: Tracked<Entr
     const remote = duplicate.data;
     if (remote) {
       return changeDiary(owner, (diary) => {
-        if (diary.entries[date]?.revision !== entry.revision) return;
-        diary.entries[date] = tracked(remote, false);
+        if (diary.entries[key]?.revision !== entry.revision) return;
+        diary.entries[key] = tracked(remote, false);
         for (const photo of Object.values(diary.photos)) {
           if (photo.row.entry_id !== entry.row.id) continue;
           photo.row.entry_id = remote.id;
@@ -150,7 +152,7 @@ async function pushEntry(client: DiaryClient, owner: string, entry: Tracked<Entr
   }
   checked(result, "database");
   return changeDiary(owner, (diary) => {
-    if (diary.entries[date]?.revision === entry.revision) diary.entries[date].pending = false;
+    if (diary.entries[key]?.revision === entry.revision) diary.entries[key].pending = false;
   });
 }
 
@@ -189,26 +191,28 @@ export async function syncDiary(
 ) {
   async function sync() {
     let diary = await readDiary(owner);
-    const project = diary.project;
-    if (project?.pending) {
+    for (const project of Object.values(diary.projects)) {
+      if (!project.pending) continue;
       checked(await client.from("projects").upsert(project.row), "database");
       diary = await changeDiary(owner, (current) => {
-        if (current.project?.revision === project.revision) current.project.pending = false;
+        if (current.projects[project.row.id]?.revision === project.revision) current.projects[project.row.id].pending = false;
       });
       onSaved(diary);
     }
     for (const entry of Object.values(diary.entries)) {
-      if (!entry.pending) continue;
+      if (!entry.pending || diary.projects[entry.row.project_id]?.pending) continue;
       diary = await pushEntry(client, owner, entry);
       onSaved(diary);
     }
+    const readyEntries = new Set(Object.values(diary.entries).filter((entry) => !entry.pending).map((entry) => entry.row.id));
     for (const photo of Object.values(diary.photos)) {
-      if (!photoWaiting(photo)) continue;
+      if (!photoWaiting(photo) || (!photo.deleted && !readyEntries.has(photo.row.entry_id))) continue;
       diary = await pushPhoto(client, owner, photo);
       onSaved(diary);
     }
     for (const report of Object.values(diary.reports)) {
-      if (!report.pending) continue;
+      const entry = diary.entries[entryKey(report.row.project_id, report.row.report_date)];
+      if (!report.pending || !entry || entry.pending) continue;
       if (!report.uploaded) {
         await upload(client, report.row.pdf_path, "application/pdf");
         await changeDiary(owner, (current) => {
@@ -223,7 +227,7 @@ export async function syncDiary(
       });
       onSaved(diary);
     }
-    if (refresh) onSaved(await pull(client, owner, diary));
+    if (refresh) onSaved(await pull(client, owner));
   }
   if (navigator.locks) {
     await navigator.locks.request("site-diary-sync-" + owner, sync);

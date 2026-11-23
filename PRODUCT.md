@@ -20,4 +20,4 @@ Use outdoors on iPhone Safari and Android Chrome, including when the connection 
 
 ## Capabilities and Constraints
 
-A private single-user diary with date history, mandatory geotags, local drafts and foreground sync. The operator can write descriptions, edit the report from the preview, and download or share it. Supabase stores the cloud copy in Sydney. Keep labour, materials and cost tracking outside the diary.
+A private single-user diary with project and date history, mandatory geotags, local drafts and foreground sync. The operator can write descriptions, edit the report from the preview, and download or share it. Supabase stores the cloud copy in Sydney. Keep labour, materials and cost tracking outside the diary.

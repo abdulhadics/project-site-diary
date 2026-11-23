@@ -1,15 +1,32 @@
-import { newDiary, type Diary } from "./model";
+import { entryKey, newDiary, type Diary, type Project, type Tracked } from "./model";
 
 const databaseName = "project-site-diary";
 let connection: Promise<IDBDatabase> | undefined;
 
 type AssetChanges = { put?: [string, Blob][]; remove?: string[] };
+type LegacyDiary = Omit<Diary, "activeProjectId" | "projects"> & { project: Tracked<Project> | null };
+
+function readSnapshot(stored: Diary | LegacyDiary | undefined): Diary {
+  if (!stored) return newDiary();
+  if ("projects" in stored) return stored;
+  const project = stored.project;
+  return {
+    activeProjectId: project?.row.id ?? null,
+    projects: project ? { [project.row.id]: project } : {},
+    entries: Object.fromEntries(Object.values(stored.entries).map((entry) => [
+      entryKey(entry.row.project_id, entry.row.report_date), entry,
+    ])),
+    photos: stored.photos,
+    reports: stored.reports,
+  };
+}
 
 function openDatabase(): Promise<IDBDatabase> {
   if (connection) return connection;
   connection = new Promise((resolve, reject) => {
-    const request = indexedDB.open(databaseName, 1);
-    request.onupgradeneeded = () => {
+    const request = indexedDB.open(databaseName, 2);
+    request.onupgradeneeded = (event) => {
+      if (event.oldVersion > 0) return;
       request.result.createObjectStore("diaries");
       request.result.createObjectStore("assets");
     };
@@ -33,7 +50,7 @@ export async function readDiary(owner: string): Promise<Diary> {
   const db = await openDatabase();
   return new Promise((resolve, reject) => {
     const request = db.transaction("diaries").objectStore("diaries").get(owner);
-    request.onsuccess = () => resolve((request.result as Diary | undefined) ?? newDiary());
+    request.onsuccess = () => resolve(readSnapshot(request.result));
     request.onerror = () => reject(request.error);
   });
 }
@@ -51,7 +68,7 @@ export async function changeDiary(
     let diary: Diary;
     let failure: unknown;
     request.onsuccess = () => {
-      diary = (request.result as Diary | undefined) ?? newDiary();
+      diary = readSnapshot(request.result);
       try {
         const changes = mutate(diary);
         records.put(diary, owner);

@@ -2,7 +2,7 @@
 
 ## Current milestone
 
-The photo warning is advisory and verified locally. The production release awaits the hosted Supabase setup.
+The Start new report flow is implemented and tested. Production deployment is pending.
 
 ## Done
 
@@ -15,19 +15,22 @@ The photo warning is advisory and verified locally. The production release await
 - M8: added the app manifest, Home Screen icons, cached app shell, loading and error states, and the consolidated setup guide. The typecheck, production build and mobile/desktop browser checks passed.
 
 - Gemini warnings allow Keep photo and continue, Add photo, or Retake. The browser test retained a flagged photo, approved its description, exported the PDF and synced the photo with the flag intact.
-- The owner confirmed phone capture and PDF export. Their Preview showed unsynced drafts, and the hosted check confirmed the schema is absent and public signups are enabled.
+- The owner confirmed phone capture and PDF export. Their Preview showed unsynced drafts. The owner applied the Sydney migration, and all four hosted tables now deny anonymous reads.
+
+- Start new report opens a separate named project and an empty draft for today. History retains photos and PDFs by project and date.
+- Browser tests passed for a legacy draft upgrade, offline creation, same-day report isolation, original PDF integrity and syncing both projects. Typecheck and production build passed.
 
 ## Next
 
-- Use the [Vercel Preview](https://project-site-diary-git-diary-preview-abdulhadi-gits-projects.vercel.app/) on the diary-preview branch for the full app.
-- Apply the migration in the hosted Sydney project, disable public signup, and create the intended site operator's login.
+- Open [Production](https://project-site-diary.vercel.app/) and use the existing diary account. The tested commit af13bd3 is deployed from main.
+- Retry sync for existing Preview drafts before switching URLs. Public signups are disabled and the hosted diary tables are in place.
 - Test the complete M1–M8 workflow on iPhone Safari and Android Chrome. Follow the grouped steps in README.md.
 - Decide the commercial hosting and backup setup, activate paid Gemini for real photos, rotate the setup key and confirm the production release.
 
 ## Open issues and decisions
 
-- Hosted Supabase Auth responded, public signups are currently enabled, and the projects table is absent. The Supabase CLI has no owner session. Apply the migration and complete the auth setup in README.md.
+- Verified public signups are disabled in hosted Supabase Auth and anonymous requests are denied for all four diary tables.
 - The full local Supabase Docker stack could not start because the Docker image store hit a disk I/O error with low C: space. SQL was exercised in isolated Postgres and device workflows used browser service fixtures on D:.
 - Actual iOS camera/location permissions, file sharing, Add to Home Screen and memory use on a real 30-photo day remain device checks.
-- Vercel built commit a237aac and marked the Preview ready. The deployed diary sign-in screen opened in Chrome under the owner's Vercel session.
+- Vercel built commit af13bd3, with both Preview and Production marked Ready. The production URL returned the diary and an anonymous AI request returned 401.
 - The owner waived the 30% Codex stop for the Retake change and this release.

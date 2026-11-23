@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 
-export function PdfPreview({ file, onEdit, onBack }: {
-  file: File; onEdit: () => void; onBack: () => void;
+export function PdfPreview({ file, onEdit, onBack, onStartReport }: {
+  file: File; onEdit: () => void; onBack: () => void; onStartReport?: () => void;
 }) {
   const [url, setUrl] = useState("");
   const [message, setMessage] = useState("");
@@ -46,7 +46,10 @@ export function PdfPreview({ file, onEdit, onBack }: {
       </div>}
       {message && <p className="notice warning" role="status">{message}</p>}
       {url && <iframe src={url} title="Daily site progress report PDF" className="pdf-frame" />}
-      <button className="text-button" type="button" onClick={onBack}>Back to the diary</button>
+      <div className="actions">
+        <button className="text-button" type="button" onClick={onBack}>Back to the diary</button>
+        {onStartReport && <button className="button" type="button" onClick={onStartReport}>Start new report</button>}
+      </div>
     </section>
   );
 }

@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { checkPhoto, describePhoto } from "../lib/ai/client";
 import { getAsset, syncMessages } from "../lib/diary/cloud";
 import {
-  assetPath, captureTime, localDay, photosForDay, poorAccuracyMetres, reportDate,
+  activeProject, assetPath, captureTime, entryKey, localDay, photosForDay, poorAccuracyMetres, reportDate,
   reportFilename, reportsForDay, tracked, waiting,
   type LocalPhoto, type LocalReport, type Photo, type PhotoReview, type Project,
 } from "../lib/diary/model";
@@ -74,14 +74,16 @@ function Workspace({ client, owner, session, signIn, signOut }: {
   const [progress, setProgress] = useState("");
   const [notice, setNotice] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [newReport, setNewReport] = useState(false);
+  const [startingReport, setStartingReport] = useState(false);
 
   useEffect(() => {
     void import("../lib/pdf/report").then(cacheShell).catch(() => {});
   }, []);
 
-  const project = diary?.project?.row;
-  const photos = diary ? photosForDay(diary, day) : [];
-  const reports = diary ? reportsForDay(diary, day) : [];
+  const project = diary ? activeProject(diary) : null;
+  const photos = diary && project ? photosForDay(diary, project.id, day) : [];
+  const reports = diary && project ? reportsForDay(diary, project.id, day) : [];
   const active = photos.find((photo) => photo.row.id === currentId);
   const activeNumber = photos.findIndex((photo) => photo.row.id === currentId) + 1;
   const queue = diary ? waiting(diary) : 0;
@@ -92,14 +94,55 @@ function Workspace({ client, owner, session, signIn, signOut }: {
 
   function navigate(next: Tab) {
     setTab(next);
+    setNewReport(false);
     setStage("list");
     setNotice("");
   }
 
-  function openDay(value: string) {
-    if (!value) return;
+  async function openDay(value: string, projectId = project?.id) {
+    if (!value || !projectId) return;
+    if (projectId !== project?.id) {
+      await save((stored) => { stored.activeProjectId = projectId; });
+    }
     setDay(value);
     navigate("diary");
+  }
+
+  function showNewReport() {
+    navigate("diary");
+    setNewReport(true);
+  }
+
+  async function startReport(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (startingReport) return;
+    const name = String(new FormData(event.currentTarget).get("name")).trim();
+    if (!name) {
+      setNotice("Enter a project name.");
+      return;
+    }
+    setStartingReport(true);
+    try {
+      const today = localDay();
+      const createdAt = new Date().toISOString();
+      const id = crypto.randomUUID();
+      await save((stored) => {
+        stored.projects[id] = tracked({
+          id, user_id: owner, name, company_name: null, prepared_by: null, created_at: createdAt,
+        });
+        stored.entries[entryKey(id, today)] = tracked({
+          id: crypto.randomUUID(), project_id: id, user_id: owner, report_date: today, created_at: createdAt,
+        });
+        stored.activeProjectId = id;
+      });
+      setDay(today);
+      setFile(null);
+      navigate("diary");
+    } catch {
+      // The local save message explains how to retry.
+    } finally {
+      setStartingReport(false);
+    }
   }
 
   function openCamera(replace = "") {
@@ -117,10 +160,11 @@ function Workspace({ client, owner, session, signIn, signOut }: {
 
   async function saveSettings(fields: ProjectFields) {
     await save((stored) => {
-      const row = stored.project?.row ?? {
+      const row = activeProject(stored) ?? {
         id: crypto.randomUUID(), user_id: owner, created_at: new Date().toISOString(),
       };
-      stored.project = tracked({ ...row, ...fields });
+      stored.projects[row.id] = tracked({ ...row, ...fields });
+      stored.activeProjectId = row.id;
     });
     void navigator.storage?.persist?.().catch(() => {});
     if (!project) navigate("diary");
@@ -133,11 +177,12 @@ function Workspace({ client, owner, session, signIn, signOut }: {
     const token = navigator.onLine ? session?.access_token : undefined;
 
     await save((stored) => {
-      const entry = stored.entries[day] ?? tracked({
+      const key = entryKey(project.id, day);
+      const entry = stored.entries[key] ?? tracked({
         id: crypto.randomUUID(), user_id: owner, project_id: project.id,
         report_date: day, created_at: capturedAt,
       });
-      stored.entries[day] = entry;
+      stored.entries[key] = entry;
       const row: Photo = {
         id, user_id: owner, project_id: project.id, entry_id: entry.row.id,
         lat: coords.latitude, lng: coords.longitude, accuracy: coords.accuracy,
@@ -289,16 +334,23 @@ function Workspace({ client, owner, session, signIn, signOut }: {
         : tab === "history" ? <section className="flow-section">
             <h1>History</h1>
             <label className="field-label">Open a report day
-              <input type="date" max={localDay()} value={day} onChange={(event) => openDay(event.target.value)} />
+              <input type="date" max={localDay()} value={day} onChange={(event) => void openDay(event.target.value).catch(() => {})} />
             </label>
             {Object.keys(diary.entries).length ? <ul className="history-list">
-              {Object.keys(diary.entries).sort().reverse().map((value) => (
-                <li key={value}>
-                  <button type="button" onClick={() => openDay(value)}>
-                    <span>{reportDate(value)}</span><span className="muted">{photosForDay(diary, value).length} photos</span>
-                  </button>
-                </li>
-              ))}
+              {Object.values(diary.entries)
+                .map(({ row }) => row)
+                .sort((a, b) => b.report_date.localeCompare(a.report_date) || b.created_at.localeCompare(a.created_at))
+                .map((entry) => (
+                  <li key={entry.id}>
+                    <button type="button" onClick={() => void openDay(entry.report_date, entry.project_id).catch(() => {})}>
+                      <span className="history-day">
+                        <strong>{diary.projects[entry.project_id]?.row.name ?? "Project"}</strong>
+                        <span className="muted">{reportDate(entry.report_date)}</span>
+                      </span>
+                      <span className="muted">{photosForDay(diary, entry.project_id, entry.report_date).length} photos</span>
+                    </button>
+                  </li>
+                ))}
             </ul> : <p className="muted">Captured report days will appear here.</p>}
           </section>
         : <>
@@ -307,7 +359,7 @@ function Workspace({ client, owner, session, signIn, signOut }: {
                 <h1>{day === localDay() ? "Today" : date}</h1>
                 <p className="day-meta">{day === localDay() ? date + " · " : ""}{project.name}</p>
               </div>
-              {day !== localDay() && <button type="button" className="button" onClick={() => openDay(localDay())}>Go to today</button>}
+              {day !== localDay() && <button type="button" className="button" onClick={() => void openDay(localDay()).catch(() => {})}>Go to today</button>}
             </section>
             {progress && <p className="notice" role="status">{progress}</p>}
             {progress && stage !== "preview" ? null : stage === "camera" ? <Camera onCapture={capture} onCancel={() => setStage(retakeId && active ? "captured" : "list")} />
@@ -332,12 +384,23 @@ function Workspace({ client, owner, session, signIn, signOut }: {
                   client={client} canUseAi={canUseAi} onSave={(change) => savePhoto(active.row.id, change)}
                   onDescribe={(note) => writeDescription(active, note)} onApprove={(description) => approve(active, description)}
                   onDelete={() => removePhoto(active)} onBack={() => setStage("list")} />
-              : stage === "preview" && file ? <PdfPreview file={file} onEdit={() => editPhoto()} onBack={() => setStage("list")} />
+              : stage === "preview" && file ? <PdfPreview file={file} onEdit={() => editPhoto()} onBack={() => setStage("list")} onStartReport={reports.length && !progress ? showNewReport : undefined} />
               : <section className="flow-section" aria-labelledby="day-photos">
                   <div className="section-row">
                     <h2 id="day-photos">Site photos <span className="count">{photos.length}</span></h2>
-                    <button type="button" className="button primary" disabled={Boolean(progress)} onClick={() => openCamera()}>{photos.length ? "+ Add photos" : "Open camera"}</button>
+                    <div className="actions">
+                      <button type="button" className="button primary" disabled={newReport} onClick={() => openCamera()}>{photos.length ? "+ Add photos" : "Open camera"}</button>
+                      {reports.length > 0 && <button type="button" className="button" aria-expanded={newReport} onClick={showNewReport}>Start new report</button>}
+                    </div>
                   </div>
+                  {newReport && <form className="form-stack report-start" onSubmit={startReport} aria-label="Start new report">
+                    <label>Project name<input name="name" autoFocus required maxLength={64} disabled={startingReport} /></label>
+                    <p className="muted">This opens an empty draft for today. Previous photos and PDFs stay in History.</p>
+                    <div className="actions">
+                      <button type="submit" className="button primary" disabled={startingReport}>{startingReport ? "Starting…" : "Start report"}</button>
+                      <button type="button" className="button" disabled={startingReport} onClick={() => { setNewReport(false); setNotice(""); }}>Cancel</button>
+                    </div>
+                  </form>}
                   {!photos.length ? <p className="muted">Take a live photo to start this day’s report.</p>
                     : <ol className="photo-list">
                         {photos.map((photo, index) => (

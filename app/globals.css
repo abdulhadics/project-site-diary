@@ -90,3 +90,6 @@ input[type="date"] { max-width: 18rem; }
 @media (prefers-reduced-motion: no-preference) {
   .button { transition: background-color 150ms ease, border-color 150ms ease; }
 }
+
+.report-start { border-block: 1px solid var(--line); padding-block: 0.9rem; }
+.history-day { display: grid; gap: 0.15rem; min-width: 0; overflow-wrap: anywhere; }
